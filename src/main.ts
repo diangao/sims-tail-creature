@@ -316,8 +316,17 @@ function runWebGL(target: HTMLCanvasElement): void {
   render();
 }
 
+function canCreateWebGLContext(): boolean {
+  const probe = document.createElement("canvas");
+  return Boolean(window.WebGLRenderingContext && (probe.getContext("webgl2") || probe.getContext("webgl")));
+}
+
 try {
-  runWebGL(canvas);
+  if (canCreateWebGLContext()) {
+    runWebGL(canvas);
+  } else {
+    runCanvasFallback(canvas);
+  }
 } catch (error) {
   console.warn("WebGL unavailable; using Canvas2D fallback.", error);
   runCanvasFallback(canvas);
