@@ -7,6 +7,8 @@ The first pass is intentionally a renderer, not a full genetic algorithm:
 - Three.js block morphology
 - articulated body and tail segments
 - sine-driven joint motion
+- tiny genotype surface for body/tail/fin proportions
+- stable, mutate, and crawler controls
 - camera/light/stage tuned for quick GIF/video capture
 
 ## Run
@@ -19,6 +21,7 @@ npm run dev
 ## Direction
 
 1. Scripted swimmer body with tail-like motion.
-2. Add a tiny genotype format for block sizes and joint phases.
-3. Add mutation and a visible fitness loop.
+2. Tiny genotype format for block sizes and joint phases.
+3. Mutation controls and a visible stability readout.
 4. Save good creature presets as named studies.
+5. Add a real physics / selection loop once the visual target feels right.

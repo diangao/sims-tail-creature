@@ -5,12 +5,42 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 
 type Segment = {
   pivot: THREE.Group;
+  mesh?: THREE.Mesh;
+  baseLength: number;
+  baseHeight: number;
   phase: number;
   amplitude: number;
 };
 
+type TailGene = {
+  length: number;
+  height: number;
+  amplitude: number;
+  phase: number;
+};
+
+type Genotype = {
+  id: string;
+  generation: number;
+  bodyLength: number;
+  bodyHeight: number;
+  headScale: number;
+  finScale: number;
+  tailSpeed: number;
+  drift: number;
+  lift: number;
+  wobble: number;
+  tail: TailGene[];
+};
+
 const canvas = document.querySelector<HTMLCanvasElement>("#scene");
 const phaseValue = document.querySelector<HTMLSpanElement>("#phaseValue");
+const generationValue = document.querySelector<HTMLSpanElement>("#generationValue");
+const stabilityValue = document.querySelector<HTMLSpanElement>("#stabilityValue");
+const creatureName = document.querySelector<HTMLHeadingElement>("#creatureName");
+const stableBtn = document.querySelector<HTMLButtonElement>("#stableBtn");
+const mutateBtn = document.querySelector<HTMLButtonElement>("#mutateBtn");
+const crawlerBtn = document.querySelector<HTMLButtonElement>("#crawlerBtn");
 
 if (!canvas) {
   throw new Error("missing #scene canvas");
@@ -22,6 +52,109 @@ function setPhase(time: number): void {
   }
 }
 
+function updateHud(genotype: Genotype): void {
+  const stability = estimateStability(genotype);
+
+  if (creatureName) {
+    creatureName.textContent = genotype.id;
+  }
+
+  if (generationValue) {
+    generationValue.textContent = String(genotype.generation);
+  }
+
+  if (stabilityValue) {
+    stabilityValue.textContent = stability.toFixed(2);
+  }
+}
+
+function estimateStability(genotype: Genotype): number {
+  const tailMean = genotype.tail.reduce((sum, gene) => sum + gene.amplitude, 0) / genotype.tail.length;
+  const centerPenalty = Math.abs(genotype.bodyLength - 1.35) * 0.18 + Math.abs(genotype.bodyHeight - 0.56) * 0.22;
+  const speedPenalty = Math.abs(genotype.tailSpeed - 2.7) * 0.06;
+  const gaitScore = 1 - Math.abs(tailMean - 0.36) * 0.92 - centerPenalty - speedPenalty;
+  return Math.max(0.12, Math.min(0.98, gaitScore));
+}
+
+function randomBetween(min: number, max: number): number {
+  return min + Math.random() * (max - min);
+}
+
+function mutateValue(value: number, amount: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value + randomBetween(-amount, amount)));
+}
+
+function stableGenotype(): Genotype {
+  return {
+    id: "Tail swimmer A-001",
+    generation: 0,
+    bodyLength: 1.35,
+    bodyHeight: 0.55,
+    headScale: 1,
+    finScale: 1,
+    tailSpeed: 2.7,
+    drift: 0.3,
+    lift: 0.035,
+    wobble: 0.045,
+    tail: Array.from({ length: 6 }, (_, index) => ({
+      length: Math.max(0.32, 0.62 - index * 0.045),
+      height: Math.max(0.18, 0.32 - index * 0.024),
+      amplitude: 0.24 + index * 0.032,
+      phase: index * 0.58,
+    })),
+  };
+}
+
+function crawlerGenotype(): Genotype {
+  return {
+    id: "Block crawler B-014",
+    generation: 14,
+    bodyLength: 1.2,
+    bodyHeight: 0.72,
+    headScale: 0.88,
+    finScale: 0.68,
+    tailSpeed: 2.05,
+    drift: 0.18,
+    lift: 0.022,
+    wobble: 0.07,
+    tail: Array.from({ length: 6 }, (_, index) => ({
+      length: Math.max(0.34, 0.54 - index * 0.025),
+      height: Math.max(0.2, 0.38 - index * 0.018),
+      amplitude: 0.16 + index * 0.024,
+      phase: index * 0.42,
+    })),
+  };
+}
+
+function mutateGenotype(source: Genotype): Genotype {
+  const generation = source.generation + 1;
+
+  return {
+    id: `Tail variant G-${generation.toString().padStart(3, "0")}`,
+    generation,
+    bodyLength: mutateValue(source.bodyLength, 0.16, 0.9, 1.68),
+    bodyHeight: mutateValue(source.bodyHeight, 0.12, 0.36, 0.78),
+    headScale: mutateValue(source.headScale, 0.16, 0.72, 1.28),
+    finScale: mutateValue(source.finScale, 0.22, 0.46, 1.38),
+    tailSpeed: mutateValue(source.tailSpeed, 0.36, 1.65, 3.35),
+    drift: mutateValue(source.drift, 0.1, 0.08, 0.5),
+    lift: mutateValue(source.lift, 0.018, 0.008, 0.068),
+    wobble: mutateValue(source.wobble, 0.024, 0.018, 0.09),
+    tail: source.tail.map((gene, index) => ({
+      length: mutateValue(gene.length, 0.12, 0.28, 0.78),
+      height: mutateValue(gene.height, 0.08, 0.12, 0.44),
+      amplitude: mutateValue(gene.amplitude, 0.075, 0.11, 0.52),
+      phase: mutateValue(gene.phase, 0.18, index * 0.28, index * 0.76 + 0.2),
+    })),
+  };
+}
+
+function bindControls(apply: (genotype: Genotype) => void, getCurrent: () => Genotype): void {
+  stableBtn?.addEventListener("click", () => apply(stableGenotype()));
+  crawlerBtn?.addEventListener("click", () => apply(crawlerGenotype()));
+  mutateBtn?.addEventListener("click", () => apply(mutateGenotype(getCurrent())));
+}
+
 function runCanvasFallback(target: HTMLCanvasElement): void {
   const ctx = target.getContext("2d");
 
@@ -31,6 +164,15 @@ function runCanvasFallback(target: HTMLCanvasElement): void {
 
   const fallbackCtx = ctx;
   const state = { width: 0, height: 0, ratio: 1 };
+  let currentGenotype = stableGenotype();
+
+  function applyGenotype(next: Genotype): void {
+    currentGenotype = next;
+    updateHud(currentGenotype);
+  }
+
+  bindControls(applyGenotype, () => currentGenotype);
+  updateHud(currentGenotype);
 
   function resize(): void {
     state.ratio = Math.min(window.devicePixelRatio, 2);
@@ -83,21 +225,21 @@ function runCanvasFallback(target: HTMLCanvasElement): void {
 
     fallbackCtx.save();
     fallbackCtx.translate(-118, 7);
-    for (let i = 0; i < 6; i += 1) {
-      const swing = Math.sin(time * 2.7 - i * 0.58) * (0.16 + i * 0.024);
+    currentGenotype.tail.forEach((gene, i) => {
+      const swing = Math.sin(time * currentGenotype.tailSpeed - gene.phase) * gene.amplitude;
       fallbackCtx.rotate(swing);
-      block(-28, 0, Math.max(38, 72 - i * 6), Math.max(22, 38 - i * 3), i < 2 ? "#6ac4d6" : "#80d6de");
-      fallbackCtx.translate(-54, 0);
-    }
+      block(-28, 0, gene.length * 105, gene.height * 102, i < 2 ? "#6ac4d6" : "#80d6de");
+      fallbackCtx.translate(-gene.length * 82, 0);
+    });
     fallbackCtx.restore();
 
     fallbackCtx.save();
     fallbackCtx.rotate(-0.08);
-    block(0, 0, 150, 62, "#f2f1d8");
-    block(106, -2, 66, 52, "#f2f1d8");
-    block(12, -46, 74, 22, "#6ac4d6");
-    block(2, 38, 78, 20, "#6ac4d6");
-    block(70, 36, 54, 18, "#80d6de");
+    block(0, 0, currentGenotype.bodyLength * 112, currentGenotype.bodyHeight * 112, "#f2f1d8");
+    block(106, -2, 66 * currentGenotype.headScale, 52 * currentGenotype.headScale, "#f2f1d8");
+    block(12, -46, 74 * currentGenotype.finScale, 22, "#6ac4d6");
+    block(2, 38, 78 * currentGenotype.finScale, 20, "#6ac4d6");
+    block(70, 36, 54 * currentGenotype.finScale, 18, "#80d6de");
     fallbackCtx.restore();
 
     fallbackCtx.fillStyle = "rgba(0, 0, 0, 0.35)";
@@ -251,6 +393,7 @@ function runWebGL(target: HTMLCanvasElement): void {
   creature.add(tailRoot);
 
   const segments: Segment[] = [];
+  let currentGenotype = stableGenotype();
   let parent = tailRoot;
 
   for (let i = 0; i < 6; i += 1) {
@@ -267,6 +410,9 @@ function runWebGL(target: HTMLCanvasElement): void {
 
     segments.push({
       pivot,
+      mesh,
+      baseLength: length,
+      baseHeight: height,
       phase: i * 0.58,
       amplitude: 0.24 + i * 0.032,
     });
@@ -274,23 +420,56 @@ function runWebGL(target: HTMLCanvasElement): void {
     parent = pivot;
   }
 
+  function applyGenotype(next: Genotype): void {
+    currentGenotype = next;
+    torso.scale.set(currentGenotype.bodyLength / 1.35, currentGenotype.bodyHeight / 0.55, 1);
+    head.scale.setScalar(currentGenotype.headScale);
+    dorsal.scale.set(currentGenotype.bodyLength / 1.35, 1, 1);
+    leftFin.scale.setScalar(currentGenotype.finScale);
+    rightFin.scale.setScalar(currentGenotype.finScale);
+    tailRoot.position.x = -0.72 * (currentGenotype.bodyLength / 1.35);
+
+    segments.forEach((segment, index) => {
+      const gene = currentGenotype.tail[index];
+
+      if (!gene || !segment.mesh) {
+        return;
+      }
+
+      segment.phase = gene.phase;
+      segment.amplitude = gene.amplitude;
+      segment.mesh.scale.set(gene.length / segment.baseLength, gene.height / segment.baseHeight, 1);
+      segment.mesh.position.x = -gene.length * 0.5;
+      segment.pivot.position.x = index === 0 ? 0 : -currentGenotype.tail[index - 1].length * 0.86;
+    });
+
+    updateHud(currentGenotype);
+  }
+
+  bindControls(applyGenotype, () => currentGenotype);
+  applyGenotype(currentGenotype);
+
   const clock = new THREE.Clock();
 
   function animateCreature(time: number): void {
-    creature.position.set(Math.sin(time * 0.45) * 0.3, 0.05 + Math.sin(time * 1.4) * 0.035, 0);
+    creature.position.set(
+      Math.sin(time * 0.45) * currentGenotype.drift,
+      0.05 + Math.sin(time * 1.4) * currentGenotype.lift,
+      0,
+    );
     creature.rotation.y = Math.sin(time * 0.42) * 0.18;
-    creature.rotation.z = Math.sin(time * 1.1) * 0.045;
+    creature.rotation.z = Math.sin(time * 1.1) * currentGenotype.wobble;
 
     torso.rotation.y = Math.sin(time * 1.8) * 0.035;
     head.rotation.y = Math.sin(time * 1.8 + 0.35) * 0.08;
 
-    leftFin.rotation.z = -0.18 + Math.sin(time * 2.4) * 0.28;
-    rightFin.rotation.z = 0.18 + Math.sin(time * 2.4 + Math.PI) * 0.28;
+    leftFin.rotation.z = -0.18 + Math.sin(time * 2.4) * 0.28 * currentGenotype.finScale;
+    rightFin.rotation.z = 0.18 + Math.sin(time * 2.4 + Math.PI) * 0.28 * currentGenotype.finScale;
     leftFin.rotation.y = Math.sin(time * 1.7 + 0.6) * 0.18;
     rightFin.rotation.y = Math.sin(time * 1.7 + Math.PI + 0.6) * 0.18;
 
     for (const segment of segments) {
-      segment.pivot.rotation.y = Math.sin(time * 2.7 - segment.phase) * segment.amplitude;
+      segment.pivot.rotation.y = Math.sin(time * currentGenotype.tailSpeed - segment.phase) * segment.amplitude;
       segment.pivot.rotation.z = Math.cos(time * 2.1 - segment.phase) * segment.amplitude * 0.18;
     }
 

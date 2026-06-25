@@ -10,9 +10,20 @@
       <section class="hud">
         <div>
           <p class="eyebrow">Sims-style morphology</p>
-          <h1>Tail swimmer A-001</h1>
+          <h1 id="creatureName">Tail swimmer A-001</h1>
         </div>
-        <p class="note">phase <span id="phaseValue">0.00</span></p>
+        <div class="panel" aria-label="creature controls">
+          <div class="metrics">
+            <p>gen <span id="generationValue">0</span></p>
+            <p>phase <span id="phaseValue">0.00</span></p>
+            <p>stability <span id="stabilityValue">0.82</span></p>
+          </div>
+          <div class="controls">
+            <button id="stableBtn" type="button">stable</button>
+            <button id="mutateBtn" type="button">mutate</button>
+            <button id="crawlerBtn" type="button">crawler</button>
+          </div>
+        </div>
       </section>
       <canvas id="scene"></canvas>
     </main>
