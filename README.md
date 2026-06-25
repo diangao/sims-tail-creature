@@ -9,6 +9,7 @@ The first pass is intentionally a renderer, not a full genetic algorithm:
 - sine-driven joint motion
 - tiny genotype surface for body/tail/fin proportions
 - stable, mutate, and crawler controls
+- visible mutation jumps across palette, tail count, body depth, and gait
 - camera/light/stage tuned for quick GIF/video capture
 
 ## Run
