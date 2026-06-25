@@ -106,6 +106,96 @@ button:active {
   transform: translateY(1px);
 }
 
+.offspring {
+  position: fixed;
+  z-index: 2;
+  left: 24px;
+  right: 24px;
+  bottom: 20px;
+  display: grid;
+  gap: 9px;
+  max-width: 820px;
+  pointer-events: none;
+}
+
+.offspring-header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 12px;
+  max-width: 820px;
+}
+
+.offspring-header p {
+  margin: 0;
+}
+
+#broodLine {
+  color: rgba(238, 247, 242, 0.72);
+  font-size: 12px;
+  text-align: right;
+}
+
+.offspring-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+  pointer-events: auto;
+}
+
+.offspring-card {
+  height: 142px;
+  display: grid;
+  grid-template-rows: 68px auto auto auto;
+  align-items: start;
+  gap: 3px;
+  min-width: 0;
+  padding: 8px;
+  border-color: rgba(238, 247, 242, 0.2);
+  background: rgba(8, 16, 23, 0.68);
+  text-align: left;
+}
+
+.offspring-card:hover {
+  border-color: rgba(238, 247, 242, 0.36);
+  background: rgba(17, 31, 34, 0.82);
+}
+
+.mini-creature {
+  width: 100%;
+  height: 68px;
+  overflow: visible;
+}
+
+.offspring-name,
+.offspring-stats,
+.keep-label {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.offspring-name {
+  color: #eef7f2;
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.offspring-stats {
+  color: rgba(238, 247, 242, 0.58);
+  font-size: 10px;
+  line-height: 1.2;
+}
+
+.keep-label {
+  margin-top: 1px;
+  color: rgba(151, 223, 214, 0.94);
+  font-size: 10px;
+  line-height: 1.2;
+}
+
 @media (max-width: 640px) {
   .hud {
     top: 16px;
@@ -117,5 +207,39 @@ button:active {
   .panel {
     margin-top: 12px;
     max-width: 360px;
+  }
+
+  .offspring {
+    left: 16px;
+    right: 16px;
+    bottom: 14px;
+    max-width: none;
+  }
+
+  .offspring-header {
+    align-items: start;
+    display: grid;
+    gap: 2px;
+  }
+
+  #broodLine {
+    max-width: 100%;
+    overflow: hidden;
+    text-align: left;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .offspring-grid {
+    grid-auto-columns: minmax(112px, 1fr);
+    grid-auto-flow: column;
+    grid-template-columns: none;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    scrollbar-width: thin;
+  }
+
+  .offspring-card {
+    height: 136px;
   }
 }

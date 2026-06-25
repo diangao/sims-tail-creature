@@ -52,8 +52,12 @@ const creatureName = document.querySelector<HTMLHeadingElement>("#creatureName")
 const stableBtn = document.querySelector<HTMLButtonElement>("#stableBtn");
 const mutateBtn = document.querySelector<HTMLButtonElement>("#mutateBtn");
 const crawlerBtn = document.querySelector<HTMLButtonElement>("#crawlerBtn");
+const offspringGrid = document.querySelector<HTMLDivElement>("#offspringGrid");
+const broodLine = document.querySelector<HTMLParagraphElement>("#broodLine");
 
 const maxTailSegments = 8;
+const broodSize = 6;
+const broodLabels = ["A", "B", "C", "D", "E", "F"];
 const palettes: Palette[] = [
   { name: "pale swimmer", body: 0xf2f1d8, joint: 0x6ac4d6, tail: 0x80d6de },
   { name: "kelp runner", body: 0xe6d8af, joint: 0x77d18d, tail: 0x42b883 },
@@ -103,6 +107,10 @@ function randomBetween(min: number, max: number): number {
 
 function randomInt(min: number, max: number): number {
   return Math.floor(randomBetween(min, max + 1));
+}
+
+function colorHex(value: number): string {
+  return `#${value.toString(16).padStart(6, "0")}`;
 }
 
 function mutateValue(value: number, amount: number, min: number, max: number): number {
@@ -165,25 +173,28 @@ function crawlerGenotype(): Genotype {
   };
 }
 
-function mutateGenotype(source: Genotype): Genotype {
+function mutateGenotype(source: Genotype, label = ""): Genotype {
   const generation = source.generation + 1;
-  const shouldLeap = generation === 1 || Math.random() > 0.45;
-  const paletteIndex = (source.paletteIndex + randomInt(1, palettes.length - 1)) % palettes.length;
+  const structuralChange = Math.random() > 0.66;
+  const paletteDrift = Math.random() > 0.82;
+  const paletteIndex = paletteDrift
+    ? (source.paletteIndex + randomInt(1, palettes.length - 1)) % palettes.length
+    : source.paletteIndex;
   const nextTailCount = Math.max(
     4,
-    Math.min(maxTailSegments, shouldLeap ? randomInt(4, maxTailSegments) : source.tail.length + randomInt(-1, 1)),
+    Math.min(maxTailSegments, structuralChange ? source.tail.length + randomInt(-1, 1) : source.tail.length),
   );
   const sourceTail = source.tail.length ? source.tail : stableGenotype().tail;
   const tail = Array.from({ length: nextTailCount }, (_, index) => {
     const basis = sourceTail[Math.min(index, sourceTail.length - 1)];
-    const tailTaper = shouldLeap ? randomBetween(0.02, 0.08) : 0;
+    const inheritedPhase = index < sourceTail.length ? basis.phase : sourceTail[sourceTail.length - 1].phase + 0.52;
 
     return {
-      length: shouldLeap ? randomBetween(0.3, 0.86) - index * tailTaper : mutateValue(basis.length, 0.22, 0.26, 0.86),
-      height: shouldLeap ? randomBetween(0.14, 0.48) - index * tailTaper * 0.42 : mutateValue(basis.height, 0.15, 0.11, 0.5),
-      depth: shouldLeap ? randomBetween(0.18, 0.54) - index * tailTaper * 0.3 : mutateValue(basis.depth, 0.13, 0.16, 0.56),
-      amplitude: shouldLeap ? randomBetween(0.12, 0.62) : mutateValue(basis.amplitude, 0.18, 0.08, 0.68),
-      phase: index * randomBetween(0.28, 0.92) + randomBetween(-0.16, 0.16),
+      length: mutateValue(basis.length, structuralChange ? 0.1 : 0.055, 0.26, 0.86),
+      height: mutateValue(basis.height, structuralChange ? 0.075 : 0.04, 0.11, 0.5),
+      depth: mutateValue(basis.depth, structuralChange ? 0.07 : 0.035, 0.16, 0.56),
+      amplitude: mutateValue(basis.amplitude, structuralChange ? 0.09 : 0.05, 0.08, 0.68),
+      phase: inheritedPhase + randomBetween(-0.12, 0.12),
     };
   }).map((gene) => ({
     length: Math.max(0.24, gene.length),
@@ -194,28 +205,115 @@ function mutateGenotype(source: Genotype): Genotype {
   }));
 
   return {
-    id: `${palettes[paletteIndex].name} G-${generation
-      .toString()
-      .padStart(3, "0")}`,
+    id: `${palettes[paletteIndex].name} ${label ? `${label}-` : ""}G-${generation.toString().padStart(3, "0")}`,
     generation,
     paletteIndex,
-    bodyLength: shouldLeap ? randomBetween(0.82, 1.86) : mutateValue(source.bodyLength, 0.32, 0.82, 1.86),
-    bodyHeight: shouldLeap ? randomBetween(0.34, 0.9) : mutateValue(source.bodyHeight, 0.22, 0.34, 0.9),
-    bodyDepth: shouldLeap ? randomBetween(0.48, 1.12) : mutateValue(source.bodyDepth, 0.24, 0.48, 1.12),
-    headScale: shouldLeap ? randomBetween(0.62, 1.42) : mutateValue(source.headScale, 0.28, 0.62, 1.42),
-    finScale: shouldLeap ? randomBetween(0.34, 1.72) : mutateValue(source.finScale, 0.42, 0.34, 1.72),
-    tailSpeed: shouldLeap ? randomBetween(1.25, 4.3) : mutateValue(source.tailSpeed, 0.75, 1.25, 4.3),
-    drift: shouldLeap ? randomBetween(0.06, 0.72) : mutateValue(source.drift, 0.2, 0.06, 0.72),
-    lift: shouldLeap ? randomBetween(0.006, 0.11) : mutateValue(source.lift, 0.038, 0.006, 0.11),
-    wobble: shouldLeap ? randomBetween(0.012, 0.16) : mutateValue(source.wobble, 0.052, 0.012, 0.16),
+    bodyLength: mutateValue(source.bodyLength, structuralChange ? 0.12 : 0.06, 0.82, 1.86),
+    bodyHeight: mutateValue(source.bodyHeight, structuralChange ? 0.1 : 0.05, 0.34, 0.9),
+    bodyDepth: mutateValue(source.bodyDepth, structuralChange ? 0.11 : 0.05, 0.48, 1.12),
+    headScale: mutateValue(source.headScale, 0.08, 0.62, 1.42),
+    finScale: mutateValue(source.finScale, structuralChange ? 0.16 : 0.08, 0.34, 1.72),
+    tailSpeed: mutateValue(source.tailSpeed, 0.18, 1.25, 4.3),
+    drift: mutateValue(source.drift, 0.055, 0.06, 0.72),
+    lift: mutateValue(source.lift, 0.012, 0.006, 0.11),
+    wobble: mutateValue(source.wobble, 0.018, 0.012, 0.16),
     tail,
   };
 }
 
+function createBrood(parent: Genotype): Genotype[] {
+  return Array.from({ length: broodSize }, (_, index) => mutateGenotype(parent, broodLabels[index] ?? String(index + 1)));
+}
+
+function miniCreatureSvg(genotype: Genotype): string {
+  const palette = palettes[genotype.paletteIndex] ?? palettes[0];
+  const centerY = 38;
+  const bodyWidth = Math.round(42 * genotype.bodyLength);
+  const bodyHeight = Math.round(34 * genotype.bodyHeight);
+  const bodyDepth = Math.round(10 * genotype.bodyDepth);
+  const bodyX = 72 - bodyWidth * 0.35;
+  const bodyY = centerY - bodyHeight / 2;
+  const headSize = Math.round(18 * genotype.headScale);
+  const finWidth = Math.round(28 * genotype.finScale);
+  let tailX = bodyX - 2;
+
+  const tail = genotype.tail
+    .slice(0, maxTailSegments)
+    .map((gene, index) => {
+      const width = Math.max(11, Math.round(gene.length * 34));
+      const height = Math.max(8, Math.round(gene.height * 32));
+      const y = centerY - height / 2 + Math.sin(index * 0.78 + gene.phase) * gene.amplitude * 7;
+      tailX -= width * 0.68;
+      return `<rect x="${tailX.toFixed(1)}" y="${y.toFixed(1)}" width="${width}" height="${height}" rx="2" fill="${colorHex(
+        index < 2 ? palette.joint : palette.tail,
+      )}" />`;
+    })
+    .join("");
+
+  return `<svg class="mini-creature" viewBox="0 0 140 76" role="img" aria-label="${genotype.id}">
+    <ellipse cx="70" cy="63" rx="48" ry="5" fill="rgba(0,0,0,0.22)" />
+    ${tail}
+    <rect x="${(bodyX + 4).toFixed(1)}" y="${(bodyY + bodyDepth).toFixed(1)}" width="${bodyWidth}" height="${bodyHeight}" rx="3" fill="rgba(0,0,0,0.2)" />
+    <rect x="${bodyX.toFixed(1)}" y="${bodyY.toFixed(1)}" width="${bodyWidth}" height="${bodyHeight}" rx="3" fill="${colorHex(palette.body)}" />
+    <rect x="${(bodyX + bodyWidth * 0.12).toFixed(1)}" y="${(bodyY - 7).toFixed(1)}" width="${finWidth}" height="7" rx="2" fill="${colorHex(
+      palette.joint,
+    )}" />
+    <rect x="${(bodyX + bodyWidth * 0.2).toFixed(1)}" y="${(bodyY + bodyHeight - 2).toFixed(1)}" width="${finWidth}" height="6" rx="2" fill="${colorHex(
+      palette.tail,
+    )}" />
+    <rect x="${(bodyX + bodyWidth - 3).toFixed(1)}" y="${(centerY - headSize / 2).toFixed(1)}" width="${headSize}" height="${Math.max(
+      12,
+      headSize * 0.8,
+    ).toFixed(1)}" rx="3" fill="${colorHex(palette.body)}" />
+  </svg>`;
+}
+
+function renderOffspringGrid(parent: Genotype, brood: Genotype[], onSelect: (candidate: Genotype) => void): void {
+  if (!offspringGrid) {
+    return;
+  }
+
+  offspringGrid.replaceChildren();
+
+  if (broodLine) {
+    broodLine.textContent = `${parent.id} -> gen ${parent.generation + 1}`;
+  }
+
+  brood.forEach((candidate, index) => {
+    const card = document.createElement("button");
+    card.type = "button";
+    card.className = "offspring-card";
+    card.setAttribute("aria-label", `keep ${candidate.id}`);
+    card.innerHTML = `
+      ${miniCreatureSvg(candidate)}
+      <span class="offspring-name">${candidate.id}</span>
+      <span class="offspring-stats">blocks ${candidate.tail.length + 2} | motor ${candidate.tailSpeed.toFixed(1)}</span>
+      <span class="offspring-stats">stability ${estimateStability(candidate).toFixed(2)}</span>
+      <span class="keep-label">keep / breed ${broodLabels[index] ?? index + 1}</span>
+    `;
+    card.addEventListener("click", () => onSelect(candidate));
+    offspringGrid.append(card);
+  });
+}
+
 function bindControls(apply: (genotype: Genotype) => void, getCurrent: () => Genotype): void {
-  stableBtn?.addEventListener("click", () => apply(stableGenotype()));
-  crawlerBtn?.addEventListener("click", () => apply(crawlerGenotype()));
-  mutateBtn?.addEventListener("click", () => apply(mutateGenotype(getCurrent())));
+  function renderBrood(parent: Genotype): void {
+    const brood = createBrood(parent);
+    renderOffspringGrid(parent, brood, (candidate) => {
+      apply(candidate);
+      renderBrood(candidate);
+    });
+  }
+
+  function applyBase(genotype: Genotype): void {
+    apply(genotype);
+    renderBrood(genotype);
+  }
+
+  stableBtn?.addEventListener("click", () => applyBase(stableGenotype()));
+  crawlerBtn?.addEventListener("click", () => applyBase(crawlerGenotype()));
+  mutateBtn?.addEventListener("click", () => renderBrood(getCurrent()));
+  renderBrood(getCurrent());
 }
 
 function runCanvasFallback(target: HTMLCanvasElement): void {
@@ -252,10 +350,6 @@ function runCanvasFallback(target: HTMLCanvasElement): void {
     fallbackCtx.lineWidth = 2;
     fallbackCtx.fillRect(x - width / 2, y - height / 2, width, height);
     fallbackCtx.strokeRect(x - width / 2, y - height / 2, width, height);
-  }
-
-  function color(value: number): string {
-    return `#${value.toString(16).padStart(6, "0")}`;
   }
 
   function drawGrid(): void {
@@ -296,18 +390,18 @@ function runCanvasFallback(target: HTMLCanvasElement): void {
     currentGenotype.tail.forEach((gene, i) => {
       const swing = Math.sin(time * currentGenotype.tailSpeed - gene.phase) * gene.amplitude;
       fallbackCtx.rotate(swing);
-      block(-28, 0, gene.length * 105, gene.height * 102, color(i < 2 ? palette.joint : palette.tail));
+      block(-28, 0, gene.length * 105, gene.height * 102, colorHex(i < 2 ? palette.joint : palette.tail));
       fallbackCtx.translate(-gene.length * 82, 0);
     });
     fallbackCtx.restore();
 
     fallbackCtx.save();
     fallbackCtx.rotate(-0.08);
-    block(0, 0, currentGenotype.bodyLength * 112, currentGenotype.bodyHeight * 112, color(palette.body));
-    block(106, -2, 66 * currentGenotype.headScale, 52 * currentGenotype.headScale, color(palette.body));
-    block(12, -46, 74 * currentGenotype.finScale, 22, color(palette.joint));
-    block(2, 38, 78 * currentGenotype.finScale, 20, color(palette.joint));
-    block(70, 36, 54 * currentGenotype.finScale, 18, color(palette.tail));
+    block(0, 0, currentGenotype.bodyLength * 112, currentGenotype.bodyHeight * 112, colorHex(palette.body));
+    block(106, -2, 66 * currentGenotype.headScale, 52 * currentGenotype.headScale, colorHex(palette.body));
+    block(12, -46, 74 * currentGenotype.finScale, 22, colorHex(palette.joint));
+    block(2, 38, 78 * currentGenotype.finScale, 20, colorHex(palette.joint));
+    block(70, 36, 54 * currentGenotype.finScale, 18, colorHex(palette.tail));
     fallbackCtx.restore();
 
     fallbackCtx.fillStyle = "rgba(0, 0, 0, 0.35)";
