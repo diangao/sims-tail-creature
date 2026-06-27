@@ -44,6 +44,25 @@ type Genotype = {
   tail: TailGene[];
 };
 
+type BroodVariant = {
+  name: string;
+  paletteShift: number;
+  tailCountDelta?: number;
+  bodyLengthBias?: number;
+  bodyHeightBias?: number;
+  bodyDepthBias?: number;
+  headScaleBias?: number;
+  finScaleBias?: number;
+  tailSpeedBias?: number;
+  driftBias?: number;
+  liftBias?: number;
+  wobbleBias?: number;
+  tailLengthBias?: number;
+  tailHeightBias?: number;
+  tailDepthBias?: number;
+  amplitudeBias?: number;
+};
+
 const canvas = document.querySelector<HTMLCanvasElement>("#scene");
 const phaseValue = document.querySelector<HTMLSpanElement>("#phaseValue");
 const generationValue = document.querySelector<HTMLSpanElement>("#generationValue");
@@ -58,6 +77,81 @@ const broodLine = document.querySelector<HTMLParagraphElement>("#broodLine");
 const maxTailSegments = 8;
 const broodSize = 6;
 const broodLabels = ["A", "B", "C", "D", "E", "F"];
+const broodVariants: BroodVariant[] = [
+  {
+    name: "long-tail swimmer",
+    paletteShift: 0,
+    tailCountDelta: 2,
+    bodyLengthBias: 0.14,
+    tailLengthBias: 0.1,
+    amplitudeBias: 0.05,
+    tailSpeedBias: 0.18,
+    driftBias: 0.04,
+  },
+  {
+    name: "short-block crawler",
+    paletteShift: 4,
+    tailCountDelta: -2,
+    bodyLengthBias: -0.14,
+    bodyHeightBias: 0.14,
+    bodyDepthBias: 0.12,
+    tailLengthBias: -0.08,
+    tailHeightBias: 0.06,
+    tailDepthBias: 0.08,
+    amplitudeBias: -0.05,
+    tailSpeedBias: -0.35,
+    driftBias: -0.05,
+  },
+  {
+    name: "fast-fin dart",
+    paletteShift: 2,
+    bodyLengthBias: 0.06,
+    finScaleBias: 0.28,
+    tailLengthBias: 0.04,
+    amplitudeBias: 0.1,
+    tailSpeedBias: 0.56,
+    driftBias: 0.12,
+    liftBias: 0.018,
+  },
+  {
+    name: "wide-stable glider",
+    paletteShift: 5,
+    bodyLengthBias: -0.08,
+    bodyHeightBias: 0.03,
+    bodyDepthBias: 0.2,
+    headScaleBias: 0.08,
+    finScaleBias: 0.12,
+    amplitudeBias: -0.04,
+    tailSpeedBias: -0.12,
+    wobbleBias: -0.012,
+  },
+  {
+    name: "wobble eel",
+    paletteShift: 3,
+    tailCountDelta: 1,
+    bodyLengthBias: 0.22,
+    bodyHeightBias: -0.1,
+    bodyDepthBias: -0.08,
+    headScaleBias: -0.08,
+    tailLengthBias: 0.05,
+    amplitudeBias: 0.14,
+    tailSpeedBias: 0.26,
+    wobbleBias: 0.05,
+  },
+  {
+    name: "heavy-tail plodder",
+    paletteShift: 1,
+    tailCountDelta: -1,
+    bodyHeightBias: 0.08,
+    bodyDepthBias: 0.16,
+    finScaleBias: -0.2,
+    tailHeightBias: 0.1,
+    tailDepthBias: 0.1,
+    amplitudeBias: 0.02,
+    tailSpeedBias: -0.48,
+    driftBias: -0.06,
+  },
+];
 const palettes: Palette[] = [
   { name: "pale swimmer", body: 0xf2f1d8, joint: 0x6ac4d6, tail: 0x80d6de },
   { name: "kelp runner", body: 0xe6d8af, joint: 0x77d18d, tail: 0x42b883 },
@@ -173,27 +267,31 @@ function crawlerGenotype(): Genotype {
   };
 }
 
-function mutateGenotype(source: Genotype, label = ""): Genotype {
+function mutateGenotype(source: Genotype, label = "", variant?: BroodVariant): Genotype {
   const generation = source.generation + 1;
-  const structuralChange = Math.random() > 0.66;
-  const paletteDrift = Math.random() > 0.82;
-  const paletteIndex = paletteDrift
-    ? (source.paletteIndex + randomInt(1, palettes.length - 1)) % palettes.length
-    : source.paletteIndex;
+  const structuralChange = Boolean(variant) || Math.random() > 0.66;
+  const paletteDrift = variant ? true : Math.random() > 0.82;
+  const paletteIndex = variant
+    ? (source.paletteIndex + variant.paletteShift) % palettes.length
+    : paletteDrift
+      ? (source.paletteIndex + randomInt(1, palettes.length - 1)) % palettes.length
+      : source.paletteIndex;
+  const tailCountDelta = variant?.tailCountDelta ?? randomInt(-1, 1);
   const nextTailCount = Math.max(
     4,
-    Math.min(maxTailSegments, structuralChange ? source.tail.length + randomInt(-1, 1) : source.tail.length),
+    Math.min(maxTailSegments, structuralChange ? source.tail.length + tailCountDelta : source.tail.length),
   );
   const sourceTail = source.tail.length ? source.tail : stableGenotype().tail;
   const tail = Array.from({ length: nextTailCount }, (_, index) => {
     const basis = sourceTail[Math.min(index, sourceTail.length - 1)];
     const inheritedPhase = index < sourceTail.length ? basis.phase : sourceTail[sourceTail.length - 1].phase + 0.52;
+    const taper = 1 - Math.min(index, 5) * 0.08;
 
     return {
-      length: mutateValue(basis.length, structuralChange ? 0.1 : 0.055, 0.26, 0.86),
-      height: mutateValue(basis.height, structuralChange ? 0.075 : 0.04, 0.11, 0.5),
-      depth: mutateValue(basis.depth, structuralChange ? 0.07 : 0.035, 0.16, 0.56),
-      amplitude: mutateValue(basis.amplitude, structuralChange ? 0.09 : 0.05, 0.08, 0.68),
+      length: mutateValue(basis.length + (variant?.tailLengthBias ?? 0) * taper, structuralChange ? 0.1 : 0.055, 0.26, 0.9),
+      height: mutateValue(basis.height + (variant?.tailHeightBias ?? 0) * taper, structuralChange ? 0.075 : 0.04, 0.11, 0.54),
+      depth: mutateValue(basis.depth + (variant?.tailDepthBias ?? 0) * taper, structuralChange ? 0.07 : 0.035, 0.16, 0.6),
+      amplitude: mutateValue(basis.amplitude + (variant?.amplitudeBias ?? 0), structuralChange ? 0.09 : 0.05, 0.08, 0.72),
       phase: inheritedPhase + randomBetween(-0.12, 0.12),
     };
   }).map((gene) => ({
@@ -205,24 +303,28 @@ function mutateGenotype(source: Genotype, label = ""): Genotype {
   }));
 
   return {
-    id: `${palettes[paletteIndex].name} ${label ? `${label}-` : ""}G-${generation.toString().padStart(3, "0")}`,
+    id: `${variant?.name ?? palettes[paletteIndex].name} ${label ? `${label}-` : ""}G-${generation
+      .toString()
+      .padStart(3, "0")}`,
     generation,
     paletteIndex,
-    bodyLength: mutateValue(source.bodyLength, structuralChange ? 0.12 : 0.06, 0.82, 1.86),
-    bodyHeight: mutateValue(source.bodyHeight, structuralChange ? 0.1 : 0.05, 0.34, 0.9),
-    bodyDepth: mutateValue(source.bodyDepth, structuralChange ? 0.11 : 0.05, 0.48, 1.12),
-    headScale: mutateValue(source.headScale, 0.08, 0.62, 1.42),
-    finScale: mutateValue(source.finScale, structuralChange ? 0.16 : 0.08, 0.34, 1.72),
-    tailSpeed: mutateValue(source.tailSpeed, 0.18, 1.25, 4.3),
-    drift: mutateValue(source.drift, 0.055, 0.06, 0.72),
-    lift: mutateValue(source.lift, 0.012, 0.006, 0.11),
-    wobble: mutateValue(source.wobble, 0.018, 0.012, 0.16),
+    bodyLength: mutateValue(source.bodyLength + (variant?.bodyLengthBias ?? 0), structuralChange ? 0.12 : 0.06, 0.78, 1.92),
+    bodyHeight: mutateValue(source.bodyHeight + (variant?.bodyHeightBias ?? 0), structuralChange ? 0.1 : 0.05, 0.3, 0.94),
+    bodyDepth: mutateValue(source.bodyDepth + (variant?.bodyDepthBias ?? 0), structuralChange ? 0.11 : 0.05, 0.42, 1.18),
+    headScale: mutateValue(source.headScale + (variant?.headScaleBias ?? 0), 0.08, 0.58, 1.48),
+    finScale: mutateValue(source.finScale + (variant?.finScaleBias ?? 0), structuralChange ? 0.16 : 0.08, 0.26, 1.9),
+    tailSpeed: mutateValue(source.tailSpeed + (variant?.tailSpeedBias ?? 0), 0.18, 1.05, 4.7),
+    drift: mutateValue(source.drift + (variant?.driftBias ?? 0), 0.055, 0.04, 0.8),
+    lift: mutateValue(source.lift + (variant?.liftBias ?? 0), 0.012, 0.006, 0.13),
+    wobble: mutateValue(source.wobble + (variant?.wobbleBias ?? 0), 0.018, 0.006, 0.2),
     tail,
   };
 }
 
 function createBrood(parent: Genotype): Genotype[] {
-  return Array.from({ length: broodSize }, (_, index) => mutateGenotype(parent, broodLabels[index] ?? String(index + 1)));
+  return Array.from({ length: broodSize }, (_, index) =>
+    mutateGenotype(parent, broodLabels[index] ?? String(index + 1), broodVariants[index % broodVariants.length]),
+  );
 }
 
 function miniCreatureSvg(genotype: Genotype): string {
@@ -287,8 +389,12 @@ function renderOffspringGrid(parent: Genotype, brood: Genotype[], onSelect: (can
     card.innerHTML = `
       ${miniCreatureSvg(candidate)}
       <span class="offspring-name">${candidate.id}</span>
-      <span class="offspring-stats">blocks ${candidate.tail.length + 2} | motor ${candidate.tailSpeed.toFixed(1)}</span>
-      <span class="offspring-stats">stability ${estimateStability(candidate).toFixed(2)}</span>
+      <span class="offspring-stats">body ${candidate.bodyLength.toFixed(1)}x${candidate.bodyHeight.toFixed(1)} | tail ${
+        candidate.tail.length
+      }</span>
+      <span class="offspring-stats">speed ${candidate.tailSpeed.toFixed(1)} | stability ${estimateStability(candidate).toFixed(
+        2,
+      )}</span>
       <span class="keep-label">keep / breed ${broodLabels[index] ?? index + 1}</span>
     `;
     card.addEventListener("click", () => onSelect(candidate));
