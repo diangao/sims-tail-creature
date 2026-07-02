@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>tail swimmer — ascii</title>
+<style>
+  :root {
+    --paper: #ece7d6;
+    --ink: #2b2418;
+    --faint: #8a8062;
+  }
+  html, body {
+    margin: 0;
+    height: 100%;
+    background: var(--paper);
+    overflow: hidden;
+  }
+  body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    /* paper grain */
+    background-image:
+      radial-gradient(ellipse at 50% 40%, rgba(255,255,255,0.35), rgba(0,0,0,0.05) 90%),
+      repeating-linear-gradient(0deg, rgba(0,0,0,0.012) 0px, rgba(0,0,0,0.012) 1px, transparent 1px, transparent 3px);
+  }
+  pre#screen {
+    margin: 0;
+    font-family: "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+    color: var(--ink);
+    user-select: none;
+    letter-spacing: 0;
+    text-shadow: 0 0 1px rgba(43,36,24,0.18);
+  }
+  #tag {
+    position: fixed;
+    left: 18px;
+    bottom: 14px;
+    font-family: "SF Mono", Menlo, monospace;
+    font-size: 11px;
+    color: var(--faint);
+    letter-spacing: 0.08em;
+  }
+</style>
+</head>
+<body>
+<pre id="screen"></pre>
+<div id="tag">tail swimmer A-001 &nbsp;·&nbsp; 6 segments &nbsp;·&nbsp; speed 2.7</div>
+<script>
+"use strict";
+
+// ── genotype: the stable "Tail swimmer A-001" from the sim, verbatim ──────
+const tailSpeed = 2.7;
+const drift = 0.3;
+const wobble = 0.045;
+const TAIL = Array.from({ length: 6 }, (_, i) => ({
+  length: Math.max(0.28, 0.62 - i * 0.045),
+  depth:  Math.max(0.18, 0.34 - i * 0.012),   // top-down thickness
+  amplitude: 0.24 + i * 0.032,
+  phase: i * 0.58,
+}));
+
+// ── ascii field ────────────────────────────────────────────────────────────
+const RAMP = " .'`^,:;~-=+*x%#@";
+const screen = document.getElementById("screen");
+
+let COLS = 150, ROWS = 66, FONT = 12;
+function fit() {
+  // cell aspect: mono glyph ≈ 0.6 width/height
+  const cw = 0.6, targetCols = 150;
+  FONT = Math.max(8, Math.floor(Math.min(
+    (window.innerWidth * 0.94) / (targetCols * cw),
+    (window.innerHeight * 0.92) / 66
+  )));
+  COLS = Math.floor((window.innerWidth * 0.94) / (FONT * cw));
+  ROWS = Math.floor((window.innerHeight * 0.92) / FONT);
+  COLS = Math.min(COLS, 220); ROWS = Math.min(ROWS, 100);
+  screen.style.fontSize = FONT + "px";
+  screen.style.lineHeight = FONT + "px";
+}
+fit();
+window.addEventListener("resize", fit);
+
+// world window: fish swims around origin; tail extends ~ -3.2
+const WX0 = -3.6, WX1 = 2.2, WY0 = -1.65, WY1 = 1.65;
+
+// capsule list rebuilt each frame: {ax, ay, bx, by, r}
+const capsules = [];
+
+function addCapsule(ax, ay, bx, by, r) {
+  capsules.push({ ax, ay, bx, by, r });
+}
+
+function buildFish(t) {
+  capsules.length = 0;
+
+  // whole-body carriage: slow drift + gentle yaw (creature.position / rotation.y in sim)
+  const cx = Math.sin(t * 0.45) * drift;
+  const cy = Math.sin(t * 1.4) * 0.10;
+  const yaw = Math.sin(t * 0.42) * 0.18 + Math.sin(t * 1.1) * wobble;
+  const cs = Math.cos(yaw), sn = Math.sin(yaw);
+  const X = (x, y) => cx + x * cs - y * sn;
+  const Y = (x, y) => cy + x * sn + y * cs;
+
+  // torso (top-down: length 1.35, width = bodyDepth 0.75)
+  addCapsule(X(-0.55, 0), Y(-0.55, 0), X(0.55, 0), Y(0.55, 0), 0.37);
+  // head, slight independent yaw
+  const hy = Math.sin(t * 1.8 + 0.35) * 0.08;
+  addCapsule(X(0.62, 0), Y(0.62, 0), X(1.08, hy * 0.6), Y(1.08, hy * 0.6), 0.245);
+  // snout
+  addCapsule(X(1.08, hy * 0.6), Y(1.08, hy * 0.6), X(1.28, hy), Y(1.28, hy), 0.13);
+
+  // pectoral fins, flapping (fin rotation in sim: sin(t*2.4)*0.28)
+  const flap = Math.sin(t * 2.4) * 0.28;
+  for (const side of [1, -1]) {
+    const fx = -0.02, fy = side * 0.42;
+    const a = side * (0.85 + (side === 1 ? flap : -flap) * 0.7);
+    const ex = fx + Math.cos(a) * 0.52 * (side === 1 ? 1 : 1);
+    const ey = fy + Math.sin(a) * 0.52;
+    addCapsule(X(fx, fy), Y(fx, fy), X(ex, ey), Y(ex, ey), 0.085);
+  }
+
+  // ── the tail: cumulative segment rotation — exact sim recurrence ──
+  let jx = -0.72, jy = 0;          // joint position (fish space)
+  let ang = Math.PI;               // pointing -x
+  for (let i = 0; i < TAIL.length; i++) {
+    const g = TAIL[i];
+    const swing = Math.sin(t * tailSpeed - g.phase) * g.amplitude;
+    ang += swing;                  // cumulative — this is the wave
+    const nx = jx + Math.cos(ang) * g.length * 0.86;
+    const ny = jy + Math.sin(ang) * g.length * 0.86;
+    addCapsule(X(jx, jy), Y(jx, jy), X(nx, ny), Y(nx, ny), g.depth * 0.5);
+    jx = nx; jy = ny;
+  }
+
+  // tail fin: small fan at the tip, following last segment angle
+  for (const spread of [0.5, -0.5]) {
+    const a = ang + spread;
+    const ex = jx + Math.cos(a) * 0.34;
+    const ey = jy + Math.sin(a) * 0.34;
+    addCapsule(X(jx, jy), Y(jx, jy), X(ex, ey), Y(ex, ey), 0.07);
+  }
+}
+
+function capsuleDist(px, py, c) {
+  const dx = c.bx - c.ax, dy = c.by - c.ay;
+  const len2 = dx * dx + dy * dy || 1e-6;
+  let u = ((px - c.ax) * dx + (py - c.ay) * dy) / len2;
+  u = u < 0 ? 0 : u > 1 ? 1 : u;
+  const ex = c.ax + u * dx - px, ey = c.ay + u * dy - py;
+  return Math.sqrt(ex * ex + ey * ey) - c.r;
+}
+
+// cheap hash for water dither
+function hash(x, y) {
+  const h = Math.sin(x * 127.1 + y * 311.7) * 43758.5453;
+  return h - Math.floor(h);
+}
+
+let last = 0;
+function frame(now) {
+  const t = now * 0.001;
+  if (now - last < 33) { requestAnimationFrame(frame); return; } // ~30fps
+  last = now;
+
+  buildFish(t);
+
+  const cellAspect = 0.6; // glyph width/height
+  const sx = (WX1 - WX0) / COLS;
+  const sy = (WY1 - WY0) / ROWS;
+  const lines = new Array(ROWS);
+
+  for (let r = 0; r < ROWS; r++) {
+    let line = "";
+    const wy = WY0 + (r + 0.5) * sy;
+    for (let cIdx = 0; cIdx < COLS; cIdx++) {
+      const wx = WX0 + (cIdx + 0.5) * sx;
+      // signed distance to fish
+      let d = 1e9;
+      for (let k = 0; k < capsules.length; k++) {
+        const dd = capsuleDist(wx, wy, capsules[k]);
+        if (dd < d) d = dd;
+      }
+      let density = 0;
+      if (d < 0) {
+        // interior: darker toward centerline, with static halftone grain
+        const grain = 0.72 + 0.28 * hash(cIdx * 3.1, r * 5.7);
+        density = Math.min(1, (0.58 + (-d) * 2.0) * grain);
+      } else if (d < 0.10) {
+        // soft edge
+        density = 0.62 * (1 - d / 0.10);
+      } else {
+        // sparse drifting water dither
+        const n = hash(cIdx * 0.7 + Math.floor(t * 0.8) * 13.3, r * 1.3);
+        density = n > 0.982 ? 0.10 : 0;
+      }
+      const idx = Math.min(RAMP.length - 1, Math.round(density * (RAMP.length - 1)));
+      line += RAMP[idx];
+    }
+    lines[r] = line;
+  }
+  screen.textContent = lines.join("\n");
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
